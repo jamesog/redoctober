@@ -29,6 +29,14 @@ var (
 	crypt   *cryptor.Cryptor
 	records passvault.Records
 	orders  order.Orderer
+
+	errAdminRequired   = errors.New("admin required")
+	errInvalidName     = errors.New("must start with an alphanumeric character and can include \"-\" or \"_\" after the first character")
+	errPasswordLength  = errors.New("password must be at least one character")
+	errUserExists      = errors.New("user with that name already exists")
+	errUserNotPresent  = errors.New("user not present")
+	errVaultCreated    = errors.New("vault is already created")
+	errVaultNotCreated = errors.New("vault has not been created or is missing")
 )
 
 // Each of these structures corresponds to the JSON expected on the
@@ -219,12 +227,12 @@ func jsonResponse(resp []byte) ([]byte, error) {
 // correct. If admin is true, the user must be an admin as well.
 func validateUser(name, password string, admin bool) error {
 	if records.NumRecords() == 0 {
-		return errors.New("Vault is not created yet")
+		return errVaultNotCreated
 	}
 
 	pr, ok := records.GetRecord(name)
 	if !ok {
-		return errors.New("User not present")
+		return errUserNotPresent
 	}
 
 	if err := pr.ValidatePassword(password); err != nil {
@@ -232,7 +240,7 @@ func validateUser(name, password string, admin bool) error {
 	}
 
 	if admin && !pr.IsAdmin() {
-		return errors.New("Admin required")
+		return errAdminRequired
 	}
 
 	return nil
@@ -244,10 +252,10 @@ var validName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9\_\-]*$`).MatchString
 // validateName checks that the username and password pass a validation test.
 func validateName(name, password string) error {
 	if !validName(name) {
-		return errors.New("must start with an alphanumeric character and can include \"-\" or \"_\" after the first character")
+		return errInvalidName
 	}
 	if password == "" {
-		return errors.New("Password must be at least one character")
+		return errPasswordLength
 	}
 
 	return nil
@@ -333,8 +341,7 @@ func Create(jsonIn []byte) ([]byte, error) {
 	}
 
 	if records.NumRecords() != 0 {
-		err = errors.New("Vault is already created")
-		return jsonStatusError(err)
+		return jsonStatusError(errVaultCreated)
 	}
 
 	// Validate the Name and Password as valid
@@ -372,8 +379,7 @@ func Summary(jsonIn []byte) ([]byte, error) {
 	}
 
 	if records.NumRecords() == 0 {
-		err = errors.New("vault has not been created")
-		return jsonStatusError(err)
+		return jsonStatusError(errVaultNotCreated)
 	}
 
 	if err := validateUser(s.Name, s.Password, false); err != nil {
@@ -442,8 +448,7 @@ func Delegate(jsonIn []byte) ([]byte, error) {
 	}
 
 	if records.NumRecords() == 0 {
-		err = errors.New("Vault is not created yet")
-		return jsonStatusError(err)
+		return jsonStatusError(errVaultNotCreated)
 	}
 
 	// Validate the Name and Password as valid
@@ -535,8 +540,7 @@ func CreateUser(jsonIn []byte) ([]byte, error) {
 	}
 
 	if records.NumRecords() == 0 {
-		err = errors.New("Vault is not created yet")
-		return jsonStatusError(err)
+		return jsonStatusError(errVaultNotCreated)
 	}
 
 	// Validate the Name and Password as valid
@@ -546,8 +550,7 @@ func CreateUser(jsonIn []byte) ([]byte, error) {
 
 	_, found := records.GetRecord(s.Name)
 	if found {
-		err = errors.New("User with that name already exists")
-		return jsonStatusError(err)
+		return jsonStatusError(errUserExists)
 	}
 
 	if _, err := records.AddNewRecord(s.Name, s.Password, false, s.UserType); err != nil {
@@ -578,8 +581,7 @@ func Password(jsonIn []byte) ([]byte, error) {
 	}
 
 	if records.NumRecords() == 0 {
-		err = errors.New("Vault is not created yet")
-		return jsonStatusError(err)
+		return jsonStatusError(errVaultNotCreated)
 	}
 
 	// add signed-in record to active set
